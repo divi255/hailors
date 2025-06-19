@@ -21,7 +21,8 @@ extern "C" hailo_status hailors_release_vdevice(hailo_vdevice_handle vdevice) {
 
 extern "C" hailo_status hailors_configure_hef(
     hailo_vdevice_handle vdevice,
-    const char* hef_path,
+    void *model, // Pointer to the model data
+    size_t model_size, // Size of the model data
     hailo_network_group_handle* network_group,
     void ***input_vstreams,   // Pointer to an array of input vstreams
     size_t *input_count,      // Pointer to the number of input vstreams
@@ -34,7 +35,8 @@ extern "C" hailo_status hailors_configure_hef(
     *input_count = 0;
     *output_count = 0;
     auto vdevice_ptr = static_cast<VDevice*>(vdevice);
-    auto hef_result = Hef::create(hef_path);
+    auto model_memory_view = MemoryView(model, model_size);
+    auto hef_result = Hef::create(model_memory_view);
     if (!hef_result) {
         return hef_result.status();
     }

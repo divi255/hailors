@@ -19,6 +19,7 @@ pub trait Network {
 }
 
 /// Enum representing supported network types for the CLI.
+#[cfg(feature = "cli")]
 #[derive(clap::ValueEnum, Clone, Debug)]
 pub enum NetworkType {
     /// YOLO Detection network.

@@ -20,7 +20,8 @@ hailo_status hailors_release_vdevice(hailo_vdevice_handle vdevice);
 
 hailo_status hailors_configure_hef(
     hailo_vdevice_handle vdevice,
-    const char* hef_path,
+    void *model, // Pointer to the model data
+    size_t model_size, // Size of the model data
     hailo_network_group_handle* network_group,
     void ***input_vstreams,   // Pointer to an array of input vstreams
     size_t *input_count,      // Pointer to the number of input vstreams

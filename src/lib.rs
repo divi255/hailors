@@ -1,6 +1,7 @@
-use std::ffi::{CString, c_void};
-use std::ptr;
 use anyhow::Result;
+use std::ffi::c_void;
+use std::os::raw::c_ulong;
+use std::ptr;
 
 mod status;
 use status::HailoStatus;
@@ -8,7 +9,8 @@ pub mod network;
 pub use crate::network::Network;
 
 /// Represents a device for interfacing with the Hailo AI hardware.
-pub struct HailoDevice {
+pub struct HailoDevice<'a> {
+    pub model: &'a [u8],
     /// Handle to the Hailo device.
     pub device_handle: *mut c_void,
     /// Handle to the configured network group.
@@ -23,7 +25,7 @@ pub struct HailoDevice {
     pub output_frame_size: usize,
 }
 
-impl HailoDevice {
+impl <'a>HailoDevice<'a> {
     /// Creates a new Hailo device and configures it with the provided HEF file.
     ///
     /// # Arguments
@@ -42,7 +44,7 @@ impl HailoDevice {
     /// let device = HailoDevice::new("./hef/yolov8s_h8.hef")
     ///     .expect("Failed to create HailoDevice");
     /// ```
-    pub fn new(hef_path: &str) -> Result<Self> {
+    pub fn new(model: &'a [u8]) -> Result<Self> {
         let mut device_handle: *mut c_void = ptr::null_mut();
         let mut network_group: *mut c_void = ptr::null_mut();
         let mut input_vstreams: *mut *mut c_void = ptr::null_mut();
@@ -52,8 +54,6 @@ impl HailoDevice {
         let mut input_frame_size: usize = 0;
         let mut output_frame_size: usize = 0;
 
-        // Call FFI function to configure the HEF and virtual streams
-        let hef_path_cstr = CString::new(hef_path)?;
         unsafe {
             let status = hailors_create_vdevice(&mut device_handle);
             if status != HailoStatus::Success {
@@ -62,7 +62,8 @@ impl HailoDevice {
 
             let configure_status = hailors_configure_hef(
                 device_handle,
-                hef_path_cstr.as_ptr() as *const i8,
+                model.as_ptr() as *const i8,
+                model.len().try_into().unwrap(),
                 &mut network_group,
                 &mut input_vstreams,
                 &mut input_count,
@@ -77,11 +78,14 @@ impl HailoDevice {
 
             if input_vstreams.is_null() || output_vstreams.is_null() {
                 hailors_release_vdevice(device_handle);
-                return Err(anyhow::anyhow!("Failed to allocate input or output vstreams"));
+                return Err(anyhow::anyhow!(
+                    "Failed to allocate input or output vstreams"
+                ));
             }
         }
 
         Ok(Self {
+            model,
             device_handle,
             network_group,
             input_vstream: input_vstreams,
@@ -110,7 +114,11 @@ impl HailoDevice {
         }
 
         unsafe {
-            let status = hailors_write_input_frame(*self.input_vstream, frame.as_ptr() as *const c_void, frame.len());
+            let status = hailors_write_input_frame(
+                *self.input_vstream,
+                frame.as_ptr() as *const c_void,
+                frame.len(),
+            );
             if status != HailoStatus::Success {
                 return Err(anyhow::anyhow!("Failed to write input frame"));
             }
@@ -150,7 +158,7 @@ impl HailoDevice {
     }
 }
 
-impl Drop for HailoDevice {
+impl Drop for HailoDevice<'_> {
     /// Releases the Hailo device and associated resources when the `HailoDevice` is dropped.
     fn drop(&mut self) {
         unsafe {
@@ -166,7 +174,8 @@ extern "C" {
     /// Configures a Hailo Execution File (HEF) and sets up virtual streams.
     fn hailors_configure_hef(
         device_handle: *mut c_void,
-        hef_path: *const i8,
+        model: *const i8,
+        model_size: c_ulong,
         network_group: *mut *mut c_void,
         input_vstreams: *mut *mut *mut c_void,
         input_count: *mut usize,
@@ -177,10 +186,18 @@ extern "C" {
     ) -> HailoStatus;
 
     /// Writes a frame to the input virtual stream.
-    fn hailors_write_input_frame(input_vstream: *mut c_void, data: *const c_void, len: usize) -> HailoStatus;
+    fn hailors_write_input_frame(
+        input_vstream: *mut c_void,
+        data: *const c_void,
+        len: usize,
+    ) -> HailoStatus;
 
     /// Reads data from the output virtual stream.
-    fn hailors_read_output_frame(output_vstream: *mut c_void, data: *mut c_void, len: usize) -> HailoStatus;
+    fn hailors_read_output_frame(
+        output_vstream: *mut c_void,
+        data: *mut c_void,
+        len: usize,
+    ) -> HailoStatus;
 
     /// Releases a Hailo virtual device.
     fn hailors_release_vdevice(device_handle: *mut c_void) -> HailoStatus;

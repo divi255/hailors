@@ -26,7 +26,7 @@ clap = { version="4.5.26", features = ["derive"], optional = true } # CLI argume
 lazy_static = "1.5.0"    # Static initialization
 
 [build-dependencies]
-cc = "1.2.7"             # C++ build tool integration
+cc = "1"             # C++ build tool integration
 
 [profile.dev]
 debug = true
